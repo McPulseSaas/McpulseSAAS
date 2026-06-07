@@ -3,10 +3,10 @@ from functools import lru_cache
 
 
 class Settings(BaseSettings):
-    supabase_url: str
-    supabase_service_key: str
-    supabase_jwt_secret: str
-    encryption_key: str
+    supabase_url: str = ""
+    supabase_service_key: str = ""
+    supabase_jwt_secret: str = ""
+    encryption_key: str = "CHANGEME_32_bytes_placeholder_key"
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
     stripe_starter_price_id: str = ""
