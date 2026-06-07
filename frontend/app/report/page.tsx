@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
@@ -21,7 +21,7 @@ interface ReportData {
   result?: ReportResult
 }
 
-export default function ReportPage() {
+function ReportContent() {
   const searchParams = useSearchParams()
   const shareToken = searchParams.get('token')
   const [data, setData] = useState<ReportData | null>(null)
@@ -154,5 +154,13 @@ export default function ReportPage() {
         </footer>
       </div>
     </div>
+  )
+}
+
+export default function ReportPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center"><p className="text-accent-green font-mono animate-pulse">LOADING...</p></div>}>
+      <ReportContent />
+    </Suspense>
   )
 }

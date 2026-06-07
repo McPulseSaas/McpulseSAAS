@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -29,7 +29,7 @@ interface Analysis {
   validation_score?: number
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [analyses, setAnalyses] = useState<Analysis[]>([])
@@ -300,5 +300,13 @@ function AnalysisReport({ analysis }: { analysis: Analysis }) {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center"><p className="text-accent-green font-mono animate-pulse">LOADING TERMINAL...</p></div>}>
+      <DashboardContent />
+    </Suspense>
   )
 }
