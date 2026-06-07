@@ -64,3 +64,6 @@ create or replace function public.increment_analyses_count(user_id uuid)
 returns void as $$
   update public.profiles set analyses_count = analyses_count + 1 where id = user_id;
 $$ language sql security definer;
+
+-- Add ai_provider column (run if upgrading existing schema)
+alter table public.analyses add column if not exists ai_provider text not null default 'openai';

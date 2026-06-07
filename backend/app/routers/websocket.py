@@ -85,6 +85,7 @@ async def analysis_websocket(websocket: WebSocket, analysis_id: str):
                 price_point=analysis["price_point"],
                 openai_api_key=api_key,
                 progress_callback=on_progress,
+                ai_provider=analysis.get("ai_provider", "openai"),
             )
 
             # Save results

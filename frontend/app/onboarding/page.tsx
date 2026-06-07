@@ -15,7 +15,8 @@ interface IdeaForm {
   target_customer: string
   solution: string
   price_point: string
-  openai_api_key: string
+  ai_provider: 'openai' | 'anthropic'
+  api_key: string
 }
 
 export default function OnboardingPage() {
@@ -30,7 +31,8 @@ export default function OnboardingPage() {
     target_customer: '',
     solution: '',
     price_point: '',
-    openai_api_key: '',
+    ai_provider: 'openai',
+    api_key: '',
   })
   const [loading, setLoading] = useState(false)
   const [terminalLines, setTerminalLines] = useState<string[]>([])
@@ -216,7 +218,7 @@ export default function OnboardingPage() {
         {step === 2 && (
           <div>
             <p className="text-accent-green font-mono text-sm mb-2">// STEP 2 OF 3</p>
-            <h1 className="text-white font-mono text-2xl font-bold mb-8">YOUR OPENAI API KEY</h1>
+            <h1 className="text-white font-mono text-2xl font-bold mb-8">YOUR AI PROVIDER</h1>
 
             <div className="card-glow rounded-lg p-6 bg-[#0f0f0f] mb-6">
               <div className="flex items-start gap-3 mb-4">
@@ -225,27 +227,51 @@ export default function OnboardingPage() {
                   <p className="text-white font-mono text-sm font-bold mb-1">HOW WE USE YOUR KEY</p>
                   <p className="text-gray-400 text-sm leading-relaxed">
                     Your key is encrypted with AES-256 before storage and never logged or transmitted in plain text.
-                    We use it only to run your analysis. You pay OpenAI directly — roughly{' '}
-                    <span className="text-accent-green font-mono">$0.50 per analysis</span> using gpt-4o-mini.
+                    We use it only to run your analysis. You pay the provider directly.
                   </p>
                 </div>
               </div>
               <p className="text-gray-500 text-xs">
                 Get your key at{' '}
-                <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-accent-green hover:underline">
-                  platform.openai.com/api-keys →
+                <a href={form.ai_provider === 'openai'
+                  ? 'https://platform.openai.com/api-keys'
+                  : 'https://console.anthropic.com/settings/keys'}
+                  target="_blank" rel="noopener noreferrer"
+                  className="text-accent-green hover:underline">
+                  {form.ai_provider === 'openai' ? 'platform.openai.com' : 'console.anthropic.com'} →
                 </a>
               </p>
             </div>
 
             <div className="space-y-6">
-              <Field label="OPENAI API KEY">
+              {/* Provider selector */}
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                {(['openai', 'anthropic'] as const).map(provider => (
+                  <button
+                    key={provider}
+                    type="button"
+                    onClick={() => update('ai_provider', provider)}
+                    className={`p-4 rounded border font-mono text-sm transition-all ${
+                      form.ai_provider === provider
+                        ? 'border-accent-green bg-accent-green/10 text-accent-green'
+                        : 'border-gray-700 text-gray-400 hover:border-gray-500'
+                    }`}
+                  >
+                    {provider === 'openai' ? '⚡ OpenAI' : '🔷 Anthropic'}
+                    <div className="text-xs mt-1 opacity-70">
+                      {provider === 'openai' ? 'gpt-4o-mini' : 'claude-haiku'}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <Field label={form.ai_provider === 'openai' ? 'OPENAI API KEY' : 'ANTHROPIC API KEY'}>
                 <input
                   type="password"
-                  value={form.openai_api_key}
-                  onChange={e => update('openai_api_key', e.target.value)}
+                  value={form.api_key}
+                  onChange={e => update('api_key', e.target.value)}
                   className={inputClass}
-                  placeholder="sk-..."
+                  placeholder={form.ai_provider === 'openai' ? 'sk-...' : 'sk-ant-...'}
                 />
               </Field>
 
@@ -258,8 +284,8 @@ export default function OnboardingPage() {
                 </button>
                 <button
                   onClick={() => {
-                    if (!form.openai_api_key.startsWith('sk-')) {
-                      toast.error('API key should start with sk-')
+                    if (!form.api_key.startsWith(form.ai_provider === 'openai' ? 'sk-' : 'sk-ant-')) {
+                      toast.error(`${form.ai_provider === 'openai' ? 'OpenAI' : 'Anthropic'} key format invalid`)
                       return
                     }
                     setStep(3)
@@ -290,7 +316,8 @@ export default function OnboardingPage() {
                 <p className="text-gray-500 font-mono text-xs mb-1">TARGET CUSTOMER</p>
                 <p className="text-white text-sm">{form.target_customer}</p>
               </div>
-              <SummaryRow label="API KEY" value={`sk-...${form.openai_api_key.slice(-4)}`} />
+              <SummaryRow label="AI PROVIDER" value={form.ai_provider === 'openai' ? 'OpenAI (gpt-4o-mini)' : 'Anthropic (claude-haiku)'} />
+              <SummaryRow label="API KEY" value={`...${form.api_key.slice(-4)}`} />
             </div>
 
             <div className="bg-[#111] border border-gray-800 rounded p-4 mb-6 font-mono text-xs text-gray-500">
@@ -298,7 +325,7 @@ export default function OnboardingPage() {
               <p>{'>'} Survey each with 5 targeted questions</p>
               <p>{'>'} Analyse patterns and produce validation report</p>
               <p>{'>'} Estimated time: 45-90 seconds</p>
-              <p>{'>'} Estimated cost: ~$0.50 from your OpenAI account</p>
+              <p>{'>'} Estimated cost: ~{form.ai_provider === 'openai' ? '$0.40' : '$0.30'} from your {form.ai_provider === 'openai' ? 'OpenAI' : 'Anthropic'} account</p>
             </div>
 
             <div className="flex gap-3">

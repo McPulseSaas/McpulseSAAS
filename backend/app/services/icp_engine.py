@@ -1,7 +1,6 @@
 import asyncio
 import json
 from typing import Callable
-from openai import AsyncOpenAI
 from app.models.schemas import AnalysisResult
 
 # Testing: 1000 personas. Will be controlled per-plan via Supabase later.
@@ -122,42 +121,52 @@ Return JSON:
 Return ONLY the JSON."""
 
 
-async def _generate_persona_batch(client: AsyncOpenAI, count: int, product_name: str, problem: str,
-                                   target_customer: str, solution: str, price_point: str) -> list:
+async def _call_openai(client, prompt: str, temperature: float) -> str:
+    """Returns raw text content from OpenAI."""
     resp = await client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role": "user", "content": PERSONA_GENERATION_PROMPT.format(
-            count=count,
-            product_name=product_name,
-            problem=problem,
-            target_customer=target_customer,
-            solution=solution,
-            price_point=price_point,
-        )}],
+        messages=[{"role": "user", "content": prompt}],
         response_format={"type": "json_object"},
-        temperature=0.9,
+        temperature=temperature,
     )
-    raw = resp.choices[0].message.content
+    return resp.choices[0].message.content
+
+
+async def _call_anthropic(client, prompt: str, temperature: float) -> str:
+    """Returns raw text content from Anthropic."""
+    resp = await client.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=4096,
+        temperature=temperature,
+        messages=[{"role": "user", "content": prompt + "\n\nIMPORTANT: Return ONLY valid JSON, no markdown, no explanation."}],
+    )
+    return resp.content[0].text
+
+
+async def _generate_persona_batch(caller, count: int, product_name: str, problem: str,
+                                   target_customer: str, solution: str, price_point: str) -> list:
+    raw = await caller(PERSONA_GENERATION_PROMPT.format(
+        count=count,
+        product_name=product_name,
+        problem=problem,
+        target_customer=target_customer,
+        solution=solution,
+        price_point=price_point,
+    ), temperature=0.9)
     parsed = json.loads(raw)
     return parsed if isinstance(parsed, list) else parsed.get(list(parsed.keys())[0], [])
 
 
-async def _survey_batch(client: AsyncOpenAI, batch: list, product_name: str, problem: str,
+async def _survey_batch(caller, batch: list, product_name: str, problem: str,
                          solution: str, price_point: str) -> list:
-    resp = await client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": SURVEY_BATCH_PROMPT.format(
-            count=len(batch),
-            product_name=product_name,
-            problem=problem,
-            solution=solution,
-            price_point=price_point,
-            personas_json=json.dumps(batch, indent=2),
-        )}],
-        response_format={"type": "json_object"},
-        temperature=0.7,
-    )
-    raw = resp.choices[0].message.content
+    raw = await caller(SURVEY_BATCH_PROMPT.format(
+        count=len(batch),
+        product_name=product_name,
+        problem=problem,
+        solution=solution,
+        price_point=price_point,
+        personas_json=json.dumps(batch, indent=2),
+    ), temperature=0.7)
     parsed = json.loads(raw)
     return parsed if isinstance(parsed, list) else parsed.get(list(parsed.keys())[0], [])
 
@@ -171,13 +180,25 @@ async def run_analysis(
     price_point: str,
     openai_api_key: str,
     progress_callback: Callable | None = None,
+    ai_provider: str = "openai",
     persona_count: int = DEFAULT_PERSONA_COUNT,
 ) -> AnalysisResult:
     """
     Main engine: generate personas, survey them, analyze results.
     progress_callback(stage, step, total, message) is called for real-time updates.
     """
-    client = AsyncOpenAI(api_key=openai_api_key)
+    if ai_provider == "anthropic":
+        import anthropic
+        raw_client = anthropic.AsyncAnthropic(api_key=openai_api_key)
+
+        async def caller(prompt: str, temperature: float) -> str:
+            return await _call_anthropic(raw_client, prompt, temperature)
+    else:
+        from openai import AsyncOpenAI
+        raw_client = AsyncOpenAI(api_key=openai_api_key)
+
+        async def caller(prompt: str, temperature: float) -> str:
+            return await _call_openai(raw_client, prompt, temperature)
 
     async def emit(stage: str, step: int, total: int, message: str):
         if progress_callback:
@@ -187,14 +208,14 @@ async def run_analysis(
     await emit("personas", 0, 3, f"[ 1/3 ] Generating {persona_count} synthetic personas...")
 
     gen_tasks = [
-        _generate_persona_batch(client, GEN_BATCH_SIZE, product_name, problem,
+        _generate_persona_batch(caller, GEN_BATCH_SIZE, product_name, problem,
                                 target_customer, solution, price_point)
         for _ in range(persona_count // GEN_BATCH_SIZE)
     ]
     # Handle remainder
     remainder = persona_count % GEN_BATCH_SIZE
     if remainder:
-        gen_tasks.append(_generate_persona_batch(client, remainder, product_name, problem,
+        gen_tasks.append(_generate_persona_batch(caller, remainder, product_name, problem,
                                                   target_customer, solution, price_point))
 
     gen_results = await asyncio.gather(*gen_tasks, return_exceptions=True)
@@ -211,7 +232,7 @@ async def run_analysis(
 
     survey_batches = [personas[i:i + SURVEY_BATCH_SIZE] for i in range(0, len(personas), SURVEY_BATCH_SIZE)]
     survey_tasks = [
-        _survey_batch(client, batch, product_name, problem, solution, price_point)
+        _survey_batch(caller, batch, product_name, problem, solution, price_point)
         for batch in survey_batches
     ]
 
@@ -248,30 +269,25 @@ async def run_analysis(
     concerns_sample = "\n".join(f"- {c}" for c in concerns[:30])
     features_sample = "\n".join(f"- {f}" for f in features[:30])
 
-    analysis_response = await client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": ANALYSIS_PROMPT.format(
-            total=total,
-            product_name=product_name,
-            problem=problem,
-            target_customer=target_customer,
-            solution=solution,
-            price_point=price_point,
-            yes_count=yes_count,
-            yes_pct=round(yes_count / total * 100),
-            maybe_count=maybe_count,
-            maybe_pct=round(maybe_count / total * 100),
-            no_count=no_count,
-            no_pct=round(no_count / total * 100),
-            wtp_summary=wtp_summary,
-            concerns_list=concerns_sample,
-            features_list=features_sample,
-        )}],
-        response_format={"type": "json_object"},
-        temperature=0.3,
-    )
+    analysis_raw = await caller(ANALYSIS_PROMPT.format(
+        total=total,
+        product_name=product_name,
+        problem=problem,
+        target_customer=target_customer,
+        solution=solution,
+        price_point=price_point,
+        yes_count=yes_count,
+        yes_pct=round(yes_count / total * 100),
+        maybe_count=maybe_count,
+        maybe_pct=round(maybe_count / total * 100),
+        no_count=no_count,
+        no_pct=round(no_count / total * 100),
+        wtp_summary=wtp_summary,
+        concerns_list=concerns_sample,
+        features_list=features_sample,
+    ), temperature=0.3)
 
-    analysis_data = json.loads(analysis_response.choices[0].message.content)
+    analysis_data = json.loads(analysis_raw)
 
     score = analysis_data.get("validation_score", 0)
     signal = "STRONG" if score >= 71 else "MODERATE" if score >= 41 else "LOW"

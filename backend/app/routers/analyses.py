@@ -35,7 +35,7 @@ async def create_analysis(
         raise HTTPException(402, detail="Analysis limit reached for your plan. Please upgrade.")
 
     # Encrypt the API key before storage
-    encrypted_key = encrypt_api_key(request.idea.openai_api_key)
+    encrypted_key = encrypt_api_key(request.idea.api_key)
 
     analysis_id = str(uuid.uuid4())
 
@@ -49,6 +49,7 @@ async def create_analysis(
         "solution": request.idea.solution,
         "price_point": request.idea.price_point,
         "encrypted_api_key": encrypted_key,
+        "ai_provider": request.idea.ai_provider,
         "status": "pending",
     }).execute()
 

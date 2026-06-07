@@ -17,13 +17,19 @@ class AnalysisStatus(str, Enum):
     failed = "failed"
 
 
+class AIProvider(str, Enum):
+    openai = "openai"
+    anthropic = "anthropic"
+
+
 class IdeaInput(BaseModel):
     product_name: str = Field(..., min_length=1, max_length=100)
     problem: str = Field(..., min_length=10, max_length=2000)
     target_customer: str = Field(..., min_length=10, max_length=1000)
     solution: str = Field(..., min_length=10, max_length=2000)
     price_point: str = Field(..., max_length=100)
-    openai_api_key: str = Field(..., min_length=20)
+    ai_provider: AIProvider = AIProvider.openai
+    api_key: str = Field(..., min_length=20)
 
 
 class PersonaResponse(BaseModel):
@@ -72,6 +78,7 @@ class AnalysisOut(BaseModel):
     result: Optional[AnalysisResult] = None
     created_at: datetime
     share_token: Optional[str] = None
+    ai_provider: str = "openai"
 
 
 class CheckoutRequest(BaseModel):
