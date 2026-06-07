@@ -27,7 +27,7 @@ class IdeaInput(BaseModel):
     problem: str = Field(..., min_length=10, max_length=2000)
     target_customer: str = Field(..., min_length=10, max_length=1000)
     solution: str = Field(..., min_length=10, max_length=2000)
-    price_point: str = Field(..., max_length=100)
+    price_point: str = Field(..., max_length=500)
     ai_provider: AIProvider = AIProvider.openai
     api_key: str = Field(..., min_length=20)
 
