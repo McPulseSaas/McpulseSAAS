@@ -6,8 +6,19 @@ from app.config import settings
 security = HTTPBearer()
 
 
+TEST_MODE_USER = {
+    "sub": "test-user-00000000-0000-0000-0000-000000000000",
+    "email": "test@mcpulse.dev",
+    "role": "authenticated",
+}
+
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     token = credentials.credentials
+
+    # TEST MODE — remove before production
+    if token == "test-mode":
+        return TEST_MODE_USER
+
     try:
         payload = jwt.decode(
             token,

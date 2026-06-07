@@ -27,12 +27,15 @@ async def create_analysis(
 ):
     user_id = user["sub"]
 
-    # Get user profile for plan check
-    profile = supabase_client.table("profiles").select("plan").eq("id", user_id).single().execute()
-    plan = profile.data.get("plan", "free") if profile.data else "free"
+    # TEST MODE: skip plan check and DB profile lookup
+    if user_id == "test-user-00000000-0000-0000-0000-000000000000":
+        plan = "growth"  # unlimited during testing
+    else:
+        profile = supabase_client.table("profiles").select("plan").eq("id", user_id).single().execute()
+        plan = profile.data.get("plan", "free") if profile.data else "free"
 
-    if not check_usage_limit(user_id, plan):
-        raise HTTPException(402, detail="Analysis limit reached for your plan. Please upgrade.")
+        if not check_usage_limit(user_id, plan):
+            raise HTTPException(402, detail="Analysis limit reached for your plan. Please upgrade.")
 
     # Encrypt the API key before storage
     encrypted_key = encrypt_api_key(request.idea.api_key)
@@ -53,8 +56,9 @@ async def create_analysis(
         "status": "pending",
     }).execute()
 
-    # Increment usage count
-    supabase_client.rpc("increment_analyses_count", {"user_id": user_id}).execute()
+    # Increment usage count (skip for test user)
+    if user_id != "test-user-00000000-0000-0000-0000-000000000000":
+        supabase_client.rpc("increment_analyses_count", {"user_id": user_id}).execute()
 
     return {"analysis_id": analysis_id, "status": "pending"}
 
