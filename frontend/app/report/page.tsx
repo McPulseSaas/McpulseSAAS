@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
-import { notFound } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 
 interface ReportResult {
   validation_score: number
@@ -21,66 +21,53 @@ interface ReportData {
   result?: ReportResult
 }
 
-export function generateStaticParams() {
-  return []
-}
-
 export default function ReportPage() {
-  const params = useParams()
-  const shareToken = params.id as string
+  const searchParams = useSearchParams()
+  const shareToken = searchParams.get('token')
   const [data, setData] = useState<ReportData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
   useEffect(() => {
+    if (!shareToken) { setError(true); setLoading(false); return }
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
     fetch(`${apiUrl}/api/analyses/share/${shareToken}`)
-      .then(res => {
-        if (!res.ok) throw new Error('Not found')
-        return res.json()
-      })
+      .then(res => { if (!res.ok) throw new Error(); return res.json() })
       .then(d => { setData(d); setLoading(false) })
       .catch(() => { setError(true); setLoading(false) })
   }, [shareToken])
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-accent-green font-mono animate-pulse">LOADING REPORT...</p>
-      </div>
-    )
-  }
+  if (loading) return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <p className="text-accent-green font-mono animate-pulse">LOADING REPORT...</p>
+    </div>
+  )
 
-  if (error || !data || data.status !== 'completed' || !data.result) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-red-400 font-mono">REPORT NOT FOUND</p>
-      </div>
-    )
-  }
+  if (error || !data || data.status !== 'completed' || !data.result) return (
+    <div className="min-h-screen bg-background flex items-center justify-center flex-col gap-4">
+      <p className="text-red-400 font-mono">REPORT NOT FOUND</p>
+      <Link href="/landing" className="text-accent-green font-mono text-sm hover:underline">← Back to MCPulse</Link>
+    </div>
+  )
 
   const r: ReportResult = data.result
   const scoreColor = r.signal_level === 'STRONG' ? '#00FF94' : r.signal_level === 'MODERATE' ? '#FFB800' : '#FF3B3B'
-  const total = r.market_response.yes + r.market_response.no + r.market_response.maybe
+  const total = r.market_response.yes + r.market_response.no + r.market_response.maybe || 1
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-white">
       <div className="bg-[#0a0a0a] border-b border-gray-800 px-8 py-6">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div>
-            <span className="text-accent-green font-mono text-sm">MCPulse</span>
+            <Link href="/landing" className="text-accent-green font-mono text-sm">MCPulse</Link>
             <h1 className="text-2xl font-bold font-mono mt-1">{data.product_name}</h1>
             <p className="text-gray-500 text-sm mt-1 font-mono">
               Market Validation Report · {r.personas_count} synthetic customers surveyed
             </p>
           </div>
           <div className="text-center">
-            <div className="text-6xl font-mono font-bold" style={{ color: scoreColor }}>
-              {r.validation_score}
-            </div>
-            <div className="font-mono text-xs mt-1" style={{ color: scoreColor }}>
-              {r.signal_level} SIGNAL
-            </div>
+            <div className="text-6xl font-mono font-bold" style={{ color: scoreColor }}>{r.validation_score}</div>
+            <div className="font-mono text-xs mt-1" style={{ color: scoreColor }}>{r.signal_level} SIGNAL</div>
           </div>
         </div>
       </div>
@@ -149,10 +136,7 @@ export default function ReportPage() {
           <h2 className="font-mono text-xs text-gray-500 uppercase tracking-widest mb-3">Willingness to Pay</h2>
           <div className="bg-[#111] rounded-xl p-6 border border-gray-800">
             {Object.entries(r.willingness_to_pay)
-              .sort((a, b) => {
-                const order = ['€0', '€1-10', '€10-30', '€30-100', '€100+']
-                return order.indexOf(a[0]) - order.indexOf(b[0])
-              })
+              .sort((a, b) => ['€0','€1-10','€10-30','€30-100','€100+'].indexOf(a[0]) - ['€0','€1-10','€10-30','€30-100','€100+'].indexOf(b[0]))
               .map(([tier, count]) => (
                 <div key={tier} className="flex items-center gap-4 mb-3">
                   <span className="text-gray-400 font-mono text-xs w-16 shrink-0">{tier}</span>

@@ -179,7 +179,7 @@ function ScoreDisplay({ score, signal }: { score: number; signal: string }) {
 
 function AnalysisReport({ analysis }: { analysis: Analysis }) {
   const r = analysis.result!
-  const shareUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/report/${analysis.share_token}`
+  const shareUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/McpulseSAAS/report/?token=${analysis.share_token}`
 
   const pieData = [
     { name: 'Yes', value: r.market_response.yes, color: '#00FF94' },
@@ -213,7 +213,7 @@ function AnalysisReport({ analysis }: { analysis: Analysis }) {
             Share →
           </button>
           <Link
-            href={`/report/${analysis.share_token}`}
+            href={`/report/?token=${analysis.share_token}`}
             className="border border-accent-green text-accent-green font-mono text-xs px-3 py-2 rounded hover:bg-accent-green hover:text-black transition-all"
           >
             Full Report →
