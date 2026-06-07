@@ -41,22 +41,23 @@ function DashboardContent() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       // AUTH DISABLED FOR TESTING
       // if (!session) { router.push('/auth/login'); return }
-      setToken(session?.access_token || 'test-mode')
+      const tok = session?.access_token || 'test-mode'
+      setToken(tok)
       try {
-        const data = await get('/api/analyses/', session.access_token)
+        const data = await get('/api/analyses/', tok)
         setAnalyses(data)
         // Auto-select from URL param or first completed
         const paramId = searchParams.get('analysis')
         if (paramId) {
           const found = data.find((a: Analysis) => a.id === paramId)
           if (found?.status === 'completed') {
-            const full = await get(`/api/analyses/${paramId}`, session.access_token)
+            const full = await get(`/api/analyses/${paramId}`, tok)
             setSelected(full)
           }
         } else {
           const first = data.find((a: Analysis) => a.status === 'completed')
           if (first) {
-            const full = await get(`/api/analyses/${first.id}`, session.access_token)
+            const full = await get(`/api/analyses/${first.id}`, tok)
             setSelected(full)
           }
         }
