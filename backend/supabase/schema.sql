@@ -32,7 +32,7 @@ create trigger on_auth_user_created
 -- Analyses table
 create table public.analyses (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users on delete cascade not null,
+  user_id uuid not null,
   product_name text not null,
   problem text not null,
   target_customer text not null,
