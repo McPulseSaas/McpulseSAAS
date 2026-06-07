@@ -1,310 +1,296 @@
-# MCPulse
+# MCPulse — Take the pulse of your market before you build
 
-> Take the pulse of your market before you build.
+> Validate your startup idea by surveying 1000 synthetic AI-generated customer personas. Get a validation score, ICP, top objections, and next steps — in minutes.
 
-MCPulse is a SaaS application that validates startup ideas by surveying 50 synthetic AI-powered customer personas. Get an instant validation score and actionable insights about your market before investing time and capital.
+## What it does
 
-## What It Does
+MCPulse lets founders and product managers validate a startup idea before writing a single line of product code. You describe your idea — the problem it solves, who it's for, how it works, and what you'd charge — then provide your own OpenAI or Anthropic API key. MCPulse uses that key to generate 1000 synthetic customer personas and survey every single one of them with five structured questions about your product.
 
-MCPulse works in three simple steps:
+The entire pipeline runs in parallel using `asyncio.gather`, completing in roughly 2-4 minutes. When it finishes, you get a 0-100 validation score, a written Ideal Customer Profile, the top three objections, the top three most-requested features, and three concrete next steps — all derived from the aggregated survey data. Each analysis costs approximately $0.30-0.40 in API credits (on the user's own key).
 
-1. **Describe** — Enter your product idea (problem, solution, target customer, price point)
-2. **Survey** — 50 diverse synthetic personas are generated using OpenAI, each surveyed with realistic responses
-3. **Report** — Get a validation score (0-100), ideal customer profile, top objections, and must-have features
+Results are stored in Supabase and surfaced in a terminal-style dashboard with live WebSocket progress updates. Every analysis gets a unique public share token so you can send the report to co-founders or investors without requiring them to log in.
 
-Perfect for founders, product managers, and market researchers who need quick, data-driven feedback on new ideas.
+## How it works (technical)
 
-## Tech Stack
+The core engine is a 3-stage pipeline in `backend/app/services/icp_engine.py`:
 
-- **Frontend:** Next.js 14, React 18, TypeScript, Tailwind CSS, Supabase Auth
-- **Backend:** FastAPI (Python 3.11+), uvicorn, async WebSockets
-- **Database:** Supabase (PostgreSQL with Row Level Security)
-- **LLM:** OpenAI API (GPT-4 recommended for persona generation)
-- **Payments:** Stripe (subscription management)
-- **Encryption:** AES-256 for storing OpenAI API keys
+**Stage 1 — Persona generation**
+10 parallel API calls × 100 personas each = 1000 personas generated concurrently via `asyncio.gather`. Each persona includes age, location, job title, industry, income level, pain points, current solutions, tech savviness, and a willingness-to-pay range.
 
-## Project Structure
+**Stage 2 — Survey**
+40 parallel API calls × 25 personas each = all 1000 surveyed concurrently. Each persona answers: Would you use this? (Yes/No/Maybe), willingness to pay (€0/€1-10/€10-30/€30-100/€100+), biggest concern, must-have feature, and whether their network has this problem.
+
+**Stage 3 — Analysis**
+The backend aggregates yes/no/maybe counts, WTP distribution, and samples of concerns and features, then sends the summary to the AI model to generate the ICP description, validation score, top objections, top features, and next steps.
+
+**Estimated cost per analysis:**
+- OpenAI `gpt-4o-mini`: ~$0.40
+- Anthropic `claude-haiku-4-5`: ~$0.30
+
+**Estimated time:** 2-4 minutes
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 14.2 (App Router, static export) |
+| Styling | Tailwind CSS, Framer Motion, JetBrains Mono |
+| Charts | Recharts |
+| State | Zustand |
+| Backend | FastAPI (Python 3.11+) |
+| Database | Supabase (PostgreSQL + RLS) |
+| Auth | Supabase Auth (JWT HS256) |
+| AI | OpenAI `gpt-4o-mini` OR Anthropic `claude-haiku-4-5` (user's own key) |
+| Real-time | WebSockets (FastAPI + browser native) |
+| Encryption | AES-256 (Fernet) for API key storage |
+| Payments | Stripe (subscriptions) |
+| PDF export | jsPDF + html2canvas |
+| Frontend hosting | GitHub Pages (free) |
+| Backend hosting | Hugging Face Spaces Docker (free) |
+
+## Project structure
 
 ```
 McPulse/
-├── frontend/              # Next.js 14 SPA
-│   ├── app/               # App router (Next.js 14)
-│   │   ├── page.tsx       # Landing page
-│   │   ├── dashboard/     # Authenticated user dashboard
-│   │   ├── report/        # Analysis report view
-│   │   ├── auth/          # Login, signup, callback
-│   │   └── onboarding/    # Plan selection
-│   ├── components/        # Reusable React components
-│   ├── lib/               # Utilities (Supabase client, API calls, state)
-│   ├── package.json
-│   └── .env.local.example
-├── backend/               # FastAPI server
+├── frontend/                         # Next.js 14 static export
 │   ├── app/
-│   │   ├── main.py        # FastAPI app entry point
-│   │   ├── config.py      # Settings & environment
-│   │   ├── database.py    # Supabase client initialization
-│   │   ├── models/        # Pydantic schemas
-│   │   ├── routers/       # API endpoints
-│   │   │   ├── analyses.py       # POST /analyses (create)
-│   │   │   ├── stripe_payments.py# POST /stripe/webhook
-│   │   │   ├── auth.py           # POST /auth/callback
-│   │   │   └── websocket.py      # WS /ws/:analysis_id (streaming)
-│   │   ├── services/      # Business logic
-│   │   │   ├── icp_engine.py     # AI persona generation & survey
-│   │   │   ├── stripe_service.py # Subscription & billing
-│   │   │   └── encryption.py     # AES-256 key encryption
-│   │   └── middleware/    # JWT auth, CORS
-│   ├── supabase/
-│   │   └── schema.sql     # Database schema
-│   ├── requirements.txt
-│   └── .env.example
+│   │   ├── landing/page.tsx          # Marketing landing page
+│   │   ├── auth/                     # Login + signup
+│   │   ├── onboarding/page.tsx       # 3-step idea form + API key
+│   │   ├── dashboard/page.tsx        # Results terminal UI
+│   │   └── report/[id]/page.tsx      # Public shareable report
+│   ├── components/
+│   │   ├── TypingHeadline.tsx        # Animated hero text
+│   │   └── PricingCard.tsx
+│   └── lib/
+│       ├── supabase.ts               # Supabase client
+│       ├── api.ts                    # Backend fetch helpers
+│       └── store.ts                  # Zustand state
+│
+├── backend/                          # FastAPI
+│   ├── app/
+│   │   ├── main.py                   # FastAPI app + CORS
+│   │   ├── config.py                 # Pydantic settings
+│   │   ├── database.py               # Supabase service client
+│   │   ├── middleware/auth.py        # JWT verification
+│   │   ├── models/schemas.py         # Pydantic schemas
+│   │   ├── routers/
+│   │   │   ├── analyses.py           # CRUD + plan limits
+│   │   │   ├── websocket.py          # Real-time progress
+│   │   │   └── stripe_payments.py    # Checkout + webhook
+│   │   └── services/
+│   │       ├── icp_engine.py         # Core AI pipeline
+│   │       └── encryption.py         # Fernet AES-256
+│   ├── supabase/schema.sql           # Full DB schema + RLS
+│   ├── Dockerfile                    # HF Spaces Docker (port 7860)
+│   └── requirements.txt
+│
+├── .github/workflows/deploy.yml      # Auto-deploy to GitHub Pages
 └── README.md
 ```
 
-## Setup
+## Live deployment (zero cost)
+
+| Service | URL |
+|---|---|
+| Frontend | https://mcpulsesaas.github.io/McpulseSAAS/ |
+| Backend API | https://McPulse-mcpulse-backend.hf.space |
+| Backend docs | https://McPulse-mcpulse-backend.hf.space/docs |
+
+## Local development setup
 
 ### Prerequisites
+- Node.js 18+
+- Python 3.11+
+- Supabase project (free tier)
+- OpenAI or Anthropic API key (used per-analysis, not stored in your .env)
 
-- **Node.js 18+** (frontend)
-- **Python 3.11+** (backend)
-- **Supabase account** (database & auth) — https://supabase.com
-- **OpenAI API key** (users provide their own key)
-- **Stripe account** (payment processing) — https://stripe.com
+### Backend
 
-### Backend Setup
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env
+# Fill in .env values (see Environment Variables section)
+uvicorn app.main:app --reload --port 8000
+```
 
-1. Navigate to the backend directory:
-   ```bash
-   cd backend
-   ```
+API available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
 
-2. Create a Python virtual environment and install dependencies:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-
-3. Copy the environment file and fill in your secrets:
-   ```bash
-   cp .env.example .env
-   ```
-
-4. Set up the Supabase database:
-   - Go to https://supabase.com and create a new project
-   - In the SQL Editor, paste the contents of `supabase/schema.sql`
-   - Execute the script to create tables and policies
-
-5. Start the backend:
-   ```bash
-   uvicorn app.main:app --reload
-   ```
-   The API will be available at `http://localhost:8000`
-
-### Frontend Setup
-
-1. Navigate to the frontend directory:
-   ```bash
-   cd frontend
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Copy the environment file:
-   ```bash
-   cp .env.local.example .env.local
-   ```
-
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
-   The app will be available at `http://localhost:3000`
-
-## Environment Variables
-
-### Backend `.env`
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `SUPABASE_URL` | Yes | Supabase project URL (from Settings > API) |
-| `SUPABASE_SERVICE_KEY` | Yes | Supabase service role key (from Settings > API) |
-| `SUPABASE_JWT_SECRET` | Yes | JWT secret from Supabase (from Settings > API) |
-| `ENCRYPTION_KEY` | Yes | 32-byte base64 key for AES-256 encryption of API keys. Generate: `python -c "import base64, os; print(base64.b64encode(os.urandom(32)).decode())"` |
-| `STRIPE_SECRET_KEY` | Yes | Stripe secret API key (from Dashboard > Developers > API keys) |
-| `STRIPE_WEBHOOK_SECRET` | Yes | Stripe webhook signing secret (from Dashboard > Developers > Webhooks) |
-| `STRIPE_STARTER_PRICE_ID` | Yes | Stripe price ID for Starter plan (€29/mo) |
-| `STRIPE_GROWTH_PRICE_ID` | Yes | Stripe price ID for Growth plan (€99/mo) |
-| `FRONTEND_URL` | Yes | Frontend base URL (e.g., `http://localhost:3000`) |
-
-### Frontend `.env.local`
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL (from Settings > API) |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anon/public key (from Settings > API) |
-| `NEXT_PUBLIC_API_URL` | Yes | Backend URL (e.g., `http://localhost:8000`) |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Yes | Stripe publishable key (from Dashboard > Developers > API keys) |
-
-## Supabase Setup
-
-1. Create a new Supabase project at https://supabase.com
-2. Go to the **SQL Editor** and create a new query
-3. Copy the entire contents of `backend/supabase/schema.sql` and run it
-4. Enable **Email Auth**:
-   - Go to Authentication > Providers > Email
-   - Enable "Email" (if not already enabled)
-   - Disable "Confirm email" for testing (optional)
-5. Copy your project credentials from Settings > API:
-   - Project URL → `SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_URL`
-   - Service Role Key → `SUPABASE_SERVICE_KEY`
-   - Anon Key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - JWT Secret → `SUPABASE_JWT_SECRET` (under Configuration)
-
-## Stripe Setup
-
-1. Create a Stripe account at https://stripe.com
-2. Create two products:
-   - **Starter Plan** — €29/month (5 analyses per month)
-   - **Growth Plan** — €99/month (unlimited analyses)
-3. Create a price for each product (recurring, monthly billing)
-4. Copy the price IDs:
-   - Starter Price ID → `STRIPE_STARTER_PRICE_ID`
-   - Growth Price ID → `STRIPE_GROWTH_PRICE_ID`
-5. Set up webhook:
-   - Go to Developers > Webhooks > Add endpoint
-   - Endpoint URL: `https://your-backend.com/api/stripe/webhook` (or `http://localhost:8000/api/stripe/webhook` for local testing with ngrok)
-   - Events to send: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`
-   - Copy the signing secret → `STRIPE_WEBHOOK_SECRET`
-
-## How the Analysis Works
-
-MCPulse uses a three-stage AI pipeline:
-
-### Stage 1: Persona Generation
-OpenAI generates 50 diverse synthetic customer personas based on your product description. Each persona includes:
-- Demographics (age, location, job title, industry)
-- Psychographics (pain points, current solutions, tech savviness)
-- Willingness to pay
-- Realistic variation to avoid bias
-
-### Stage 2: Survey Simulation
-Each persona is surveyed with the same questions:
-- Would you use this product? (Yes/No/Maybe)
-- What's your willingness to pay?
-- What's your biggest concern?
-- What's the one feature that would make you buy?
-- Do people in your network have this problem?
-
-Responses are realistic and diverse — some personas are enthusiastic, others skeptical, most lukewarm.
-
-### Stage 3: Analysis & Scoring
-The backend aggregates survey results and uses OpenAI to generate:
-- **Validation Score** (0-100) based on:
-  - % saying "Yes" (weighted heavily)
-  - % saying "Maybe"
-  - Willingness-to-pay alignment
-  - Strength of demand signals
-- **Ideal Customer Profile** — description of the most likely buyer
-- **Top Objections** — most common concerns
-- **Top Features** — most requested features
-- **Market Fit Assessment** — specific guidance
-
-The entire flow happens asynchronously. Users see live progress via WebSocket, and the report is generated within 30-60 seconds.
-
-## Pricing Tiers
-
-| Plan | Price | Analyses | Features |
-|------|-------|----------|----------|
-| **Free** | $0 | 1 | Full access, 50-persona survey |
-| **Starter** | €29/month | 5 | Priority processing |
-| **Growth** | €99/month | Unlimited | Priority + API access (future) |
-
-Free users can run one analysis. To get more, they upgrade to a paid plan. Subscription management is handled via Stripe checkout.
-
-## Security
-
-- **OpenAI keys** are **never stored in plain text**. Users provide their own API key during each analysis, which is:
-  - Encrypted with AES-256 using a 32-byte key
-  - Stored encrypted in the database
-  - Decrypted only when making requests to OpenAI
-  - Never logged or exposed
-- **JWT authentication** via Supabase (uses RS256 signing)
-- **Row Level Security (RLS)** on all database tables — users can only access their own data
-- **CORS** enabled only for your frontend domain
-- **Stripe webhooks** are verified with signing secrets
-
-## Deployment
-
-### Frontend (Vercel)
+### Frontend
 
 ```bash
 cd frontend
-npm run build
-# Push to GitHub and connect to Vercel
-# Set environment variables in Vercel project settings
-npm run start  # Local testing
+npm install --legacy-peer-deps
+cp .env.local.example .env.local
+# Fill in .env.local values
+npm run dev
 ```
 
-### Backend (Railway, Render, or Fly.io)
+App available at `http://localhost:3000`.
 
-**Railway:**
-```bash
-cd backend
-railway up
+## Environment variables
+
+### Backend (`.env`)
+
+| Variable | Description |
+|---|---|
+| `SUPABASE_URL` | Your Supabase project URL |
+| `SUPABASE_SERVICE_KEY` | Supabase `service_role` key (full DB access, never expose to browser) |
+| `SUPABASE_JWT_SECRET` | Supabase JWT secret — found at Settings → API → JWT Settings |
+| `ENCRYPTION_KEY` | Fernet key for AES-256 API key encryption. Generate: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+| `STRIPE_SECRET_KEY` | Stripe secret key (`sk_test_...` or `sk_live_...`) |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
+| `STRIPE_STARTER_PRICE_ID` | Stripe price ID for Starter plan (€29/mo) |
+| `STRIPE_GROWTH_PRICE_ID` | Stripe price ID for Growth plan (€99/mo) |
+| `FRONTEND_URL` | Frontend origin for CORS (e.g. `https://mcpulsesaas.github.io`) |
+
+### Frontend (`.env.local`)
+
+| Variable | Description |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public key |
+| `NEXT_PUBLIC_API_URL` | Backend URL (e.g. `https://McPulse-mcpulse-backend.hf.space`) |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe publishable key |
+
+## Supabase setup
+
+1. Create a project at [supabase.com](https://supabase.com)
+2. SQL Editor → paste `backend/supabase/schema.sql` → Run
+3. Authentication → Email provider → confirm enabled
+4. Get credentials from Settings → API
+
+The schema creates:
+- `profiles` table (extends `auth.users`) with `plan`, `stripe_customer_id`, `stripe_subscription_id`, `analyses_count`
+- `analyses` table with RLS (users see only their own rows), `ai_provider` column, `share_token` (random 16-byte hex, auto-generated)
+- `increment_analyses_count` RPC function
+- Trigger `on_auth_user_created` to auto-create a profile row on signup
+
+## Deployment
+
+### Frontend → GitHub Pages (automatic)
+
+Push to `main` → GitHub Actions builds the Next.js static export (`next build` with `output: 'export'`) → deploys to GitHub Pages.
+
+The `basePath` in `next.config.js` is set to `/McpulseSAAS` to match the GitHub Pages repo URL.
+
+Required GitHub repository secrets:
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_API_URL`
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
+
+Enable in: Settings → Pages → Source: GitHub Actions
+
+### Backend → Hugging Face Spaces
+
+The `backend/` folder is pushed to a separate HF Space repository. Set all backend env vars as Space secrets (Settings → Variables and secrets). The `Dockerfile` exposes port 7860 (HF Spaces default).
+
+## API reference
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/health` | None | Health check |
+| POST | `/api/analyses/` | Bearer | Create analysis (returns `analysis_id`) |
+| GET | `/api/analyses/` | Bearer | List user analyses |
+| GET | `/api/analyses/{id}` | Bearer | Get analysis detail |
+| DELETE | `/api/analyses/{id}` | Bearer | Delete analysis |
+| GET | `/api/analyses/share/{token}` | None | Public shared report |
+| WS | `/ws/analysis/{id}` | None | Real-time progress stream |
+| POST | `/api/stripe/checkout` | Bearer | Create Stripe checkout session |
+| POST | `/api/stripe/webhook` | Stripe-Signature | Stripe webhook handler |
+| GET | `/api/stripe/subscription` | Bearer | Get subscription status |
+
+Interactive docs: `{BACKEND_URL}/docs`
+
+## WebSocket protocol
+
+After `POST /api/analyses/` returns an `analysis_id`, connect to `/ws/analysis/{analysis_id}`. The engine starts immediately on connection.
+
+Messages received:
+
+```json
+// Progress update (3 stages)
+{"type": "progress", "stage": "personas", "step": 1, "total": 3, "message": "[ 1/3 ] Generated 1000 personas ✓"}
+
+// Final result
+{"type": "complete", "result": { ...AnalysisResult }}
+
+// Error
+{"type": "error", "message": "..."}
 ```
 
-**Render:**
-```bash
-# Add a new Web Service, connect GitHub repo
-# Set environment variables in Render dashboard
-```
+## AI engine details
 
-**Fly.io:**
-```bash
-cd backend
-fly deploy
-```
+**Models:**
+- OpenAI: `gpt-4o-mini` with `response_format: {"type": "json_object"}`
+- Anthropic: `claude-haiku-4-5` with explicit JSON-only instruction appended to prompt
 
-Update `NEXT_PUBLIC_API_URL` in frontend to point to your deployed backend.
+**Batching strategy for 1000 personas:**
+- Generation: `GEN_BATCH_SIZE = 100` → 10 concurrent calls via `asyncio.gather`
+- Survey: `SURVEY_BATCH_SIZE = 25` → 40 concurrent calls via `asyncio.gather`
 
-## Running Locally with Ngrok (for Stripe webhooks)
+**Scoring thresholds:**
+- 0-40: LOW SIGNAL
+- 41-70: MODERATE SIGNAL
+- 71-100: STRONG SIGNAL
 
-To test Stripe webhooks locally:
+**Realistic survey calibration:** The survey prompt instructs the model to distribute responses realistically — for most ideas, 20-40% Yes, 30-50% Maybe, 20-40% No.
 
-1. Install ngrok: https://ngrok.com
-2. Start ngrok: `ngrok http 8000`
-3. Copy the forwarding URL (e.g., `https://abc123.ngrok.io`)
-4. Add webhook in Stripe dashboard pointing to `https://abc123.ngrok.io/api/stripe/webhook`
-5. Update `STRIPE_WEBHOOK_SECRET` in your `.env` with the new signing secret
+## Pricing plans
 
-## Common Issues
+| Plan | Price | Analyses/month |
+|---|---|---|
+| Free | €0 | 1 |
+| Starter | €29/mo | 5 |
+| Growth | €99/mo | Unlimited |
 
-**"OpenAI API key is invalid"**
-- Make sure the user's OpenAI key is correctly formatted (starts with `sk-`)
-- Check that the key has API access enabled in OpenAI account
+Plan limits are enforced server-side in `backend/app/routers/analyses.py` via the `check_usage_limit` function, which queries the `analyses` table count against the user's profile `plan`.
 
-**"Supabase JWT is invalid"**
-- Verify `SUPABASE_JWT_SECRET` is correctly copied (it's under Settings > Configuration, not API)
-- Make sure `SUPABASE_SERVICE_KEY` (not anon key) is in backend `.env`
+## Security
 
-**"Stripe webhook not firing"**
-- Ensure webhook endpoint is publicly accessible (use ngrok for local testing)
-- Verify signing secret is correct in `.env`
-- Check Stripe dashboard > Developers > Webhooks > Events for failures
+- User API keys (OpenAI/Anthropic) are encrypted with AES-256 (Fernet) before storage in the `encrypted_api_key` column
+- Keys are decrypted only inside the WebSocket handler at runtime, server-side only, never logged or returned to the client
+- Supabase RLS ensures users can only `SELECT` and `INSERT` their own analyses
+- Public share links use random 16-byte hex tokens auto-generated by PostgreSQL (`encode(gen_random_bytes(16), 'hex')`)
+- JWT tokens are verified with `HS256` using `SUPABASE_JWT_SECRET`
+- CORS is restricted to `FRONTEND_URL` and `https://mcpulsesaas.github.io`
 
-**"CORS errors"**
-- Make sure `FRONTEND_URL` in backend `.env` matches your frontend domain exactly
-- Verify frontend is making requests to correct `NEXT_PUBLIC_API_URL`
+## Testing mode
 
-## Development
+Auth is currently bypassed for easier development:
+- The frontend sends `test-mode` as the Bearer token
+- The backend accepts it and returns a fixed mock user (`test-user-00000000-0000-0000-0000-000000000000`)
+- Plan limits are bypassed (mock user is treated as `growth` plan)
 
-- **Frontend:** `npm run dev` starts Next.js dev server with hot reload
-- **Backend:** `uvicorn app.main:app --reload` enables auto-reload on code changes
-- **Database:** Supabase provides a web UI for viewing data at https://app.supabase.com
+**To re-enable auth before going to production:**
+1. Remove the `if token == "test-mode"` block in `backend/app/middleware/auth.py`
+2. Uncomment auth guards in `frontend/app/onboarding/page.tsx` and `frontend/app/dashboard/page.tsx`
+
+## Stripe setup
+
+1. Create a Stripe account at [stripe.com](https://stripe.com)
+2. Create two recurring products:
+   - **Starter** — €29/month (5 analyses)
+   - **Growth** — €99/month (unlimited)
+3. Copy the price IDs to `STRIPE_STARTER_PRICE_ID` and `STRIPE_GROWTH_PRICE_ID`
+4. Add a webhook endpoint pointing to `{BACKEND_URL}/api/stripe/webhook`
+5. Subscribe to events: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`
+6. Copy the signing secret to `STRIPE_WEBHOOK_SECRET`
+
+For local webhook testing, use `ngrok http 8000` to expose your local backend and point the Stripe dashboard webhook at the forwarding URL.
+
+## Roadmap
+
+- [ ] Re-enable Supabase auth for production
+- [ ] Per-plan persona count via Supabase config (Free=50, Starter=200, Growth=1000)
+- [ ] PDF export of report (jsPDF + html2canvas already installed)
+- [ ] Stripe live mode
+- [ ] Email report delivery
+- [ ] Team sharing / multi-seat
 
 ## License
 
