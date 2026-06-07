@@ -36,11 +36,12 @@ export default function OnboardingPage() {
   const [terminalLines, setTerminalLines] = useState<string[]>([])
   const terminalRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) router.push('/auth/login')
-    })
-  }, [router])
+  // AUTH DISABLED FOR TESTING
+  // useEffect(() => {
+  //   supabase.auth.getSession().then(({ data: { session } }) => {
+  //     if (!session) router.push('/auth/login')
+  //   })
+  // }, [router])
 
   useEffect(() => {
     if (terminalRef.current) {
@@ -62,18 +63,15 @@ export default function OnboardingPage() {
     addLine('> Initializing MCPulse analysis engine...')
 
     try {
+      // AUTH DISABLED FOR TESTING — use empty token
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        toast.error('Session expired. Please log in again.')
-        router.push('/auth/login')
-        return
-      }
+      const accessToken = session?.access_token || 'test-mode'
 
-      addLine('> Authenticating...')
+      addLine('> Connecting...')
 
       const response = await post('/api/analyses/', {
         idea: form,
-      }, session.access_token)
+      }, accessToken)
 
       const id = response.analysis_id
       setAnalysisId(id)

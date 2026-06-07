@@ -90,7 +90,7 @@ export default function LandingPage() {
             MCPulse
           </span>
           <Link
-            href="/auth/login"
+            href="/dashboard"
             className="font-mono text-sm text-[#999] hover:text-accent-green transition-colors"
           >
             Login
@@ -117,7 +117,7 @@ export default function LandingPage() {
 
           {/* CTA */}
           <Link
-            href="/auth/signup"
+            href="/onboarding"
             className="inline-block bg-accent-green text-black font-mono font-bold px-8 py-4 rounded shadow-glow-green hover:shadow-[0_0_35px_rgba(0,255,148,0.5)] hover:scale-[1.02] transition-all duration-200 text-base"
           >
             Run the analysis →

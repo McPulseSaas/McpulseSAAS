@@ -39,8 +39,9 @@ function DashboardContent() {
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session) { router.push('/auth/login'); return }
-      setToken(session.access_token)
+      // AUTH DISABLED FOR TESTING
+      // if (!session) { router.push('/auth/login'); return }
+      setToken(session?.access_token || 'test-mode')
       try {
         const data = await get('/api/analyses/', session.access_token)
         setAnalyses(data)
