@@ -13,7 +13,7 @@ const HOW_IT_WORKS = [
     step: '02',
     label: 'WE SURVEY THE MARKET',
     description:
-      'We generate 50 synthetic personas and survey each one with 5 targeted questions about your product.',
+      'We generate 1000 synthetic personas and survey each one with 5 targeted questions about your product.',
   },
   {
     step: '03',
@@ -47,7 +47,7 @@ const PRICING = [
     tier: 'Free',
     price: '€0',
     volume: '1 analysis',
-    features: ['50 synthetic personas', 'Full validation report', 'Shareable link'],
+    features: ['1000 synthetic personas', 'Full validation report', 'Shareable link'],
     cta: 'Start free',
     href: '/auth/signup',
     highlighted: false,
