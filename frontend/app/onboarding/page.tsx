@@ -321,10 +321,10 @@ export default function OnboardingPage() {
             </div>
 
             <div className="bg-[#111] border border-gray-800 rounded p-4 mb-6 font-mono text-xs text-gray-500">
-              <p>{'>'} Will generate 50 synthetic personas</p>
+              <p>{'>'} Will generate 1000 synthetic personas</p>
               <p>{'>'} Survey each with 5 targeted questions</p>
               <p>{'>'} Analyse patterns and produce validation report</p>
-              <p>{'>'} Estimated time: 45-90 seconds</p>
+              <p>{'>'} Estimated time: 2-4 minutes</p>
               <p>{'>'} Estimated cost: ~{form.ai_provider === 'openai' ? '$0.40' : '$0.30'} from your {form.ai_provider === 'openai' ? 'OpenAI' : 'Anthropic'} account</p>
             </div>
 
@@ -379,7 +379,7 @@ export default function OnboardingPage() {
             </div>
 
             <p className="text-gray-500 text-sm mt-4 text-center font-mono">
-              Do not close this window. Analysis takes 45-90 seconds.
+              Do not close this window. Analysis takes 2-4 minutes — do not close this window.
             </p>
           </div>
         )}
