@@ -4,6 +4,9 @@ from app.middleware.auth import get_current_user
 from app.database import supabase_client
 from app.services.encryption import encrypt_api_key
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Analysis is triggered via WebSocket /ws/analysis/{analysis_id}
 # The client connects after creation to get real-time progress
@@ -26,6 +29,12 @@ async def create_analysis(
     user: dict = Depends(get_current_user)
 ):
     user_id = user["sub"]
+    logger.info(f"create_analysis called for user_id={user_id}")
+
+    # Check supabase is available
+    if supabase_client is None:
+        logger.error("supabase_client is None — check SUPABASE_URL and SUPABASE_SERVICE_KEY secrets")
+        raise HTTPException(500, detail="Database not configured. Check SUPABASE_URL and SUPABASE_SERVICE_KEY in HF Space secrets.")
 
     # TEST MODE: skip plan check and DB profile lookup
     if user_id == "test-user-00000000-0000-0000-0000-000000000000":
@@ -38,23 +47,33 @@ async def create_analysis(
             raise HTTPException(402, detail="Analysis limit reached for your plan. Please upgrade.")
 
     # Encrypt the API key before storage
-    encrypted_key = encrypt_api_key(request.idea.api_key)
+    try:
+        encrypted_key = encrypt_api_key(request.idea.api_key)
+        logger.info("API key encrypted successfully")
+    except Exception as e:
+        logger.error(f"Encryption failed: {e}")
+        raise HTTPException(500, detail=f"Encryption error: {str(e)}")
 
     analysis_id = str(uuid.uuid4())
 
     # Insert analysis record
-    supabase_client.table("analyses").insert({
-        "id": analysis_id,
-        "user_id": user_id,
-        "product_name": request.idea.product_name,
-        "problem": request.idea.problem,
-        "target_customer": request.idea.target_customer,
-        "solution": request.idea.solution,
-        "price_point": request.idea.price_point,
-        "encrypted_api_key": encrypted_key,
-        "ai_provider": request.idea.ai_provider,
-        "status": "pending",
-    }).execute()
+    try:
+        result = supabase_client.table("analyses").insert({
+            "id": analysis_id,
+            "user_id": user_id,
+            "product_name": request.idea.product_name,
+            "problem": request.idea.problem,
+            "target_customer": request.idea.target_customer,
+            "solution": request.idea.solution,
+            "price_point": request.idea.price_point,
+            "encrypted_api_key": encrypted_key,
+            "ai_provider": request.idea.ai_provider.value if hasattr(request.idea.ai_provider, 'value') else request.idea.ai_provider,
+            "status": "pending",
+        }).execute()
+        logger.info(f"Analysis inserted: {analysis_id}, result: {result}")
+    except Exception as e:
+        logger.error(f"DB insert failed: {e}")
+        raise HTTPException(500, detail=f"Database error: {str(e)}")
 
     # Increment usage count (skip for test user)
     if user_id != "test-user-00000000-0000-0000-0000-000000000000":
