@@ -37,7 +37,7 @@ async def create_analysis(
         raise HTTPException(500, detail="Database not configured. Check SUPABASE_URL and SUPABASE_SERVICE_KEY in HF Space secrets.")
 
     # TEST MODE: skip plan check and DB profile lookup
-    if user_id == "test-user-00000000-0000-0000-0000-000000000000":
+    if user_id == "00000000-0000-0000-0000-000000000000":
         plan = "growth"  # unlimited during testing
     else:
         profile = supabase_client.table("profiles").select("plan").eq("id", user_id).single().execute()
@@ -76,7 +76,7 @@ async def create_analysis(
         raise HTTPException(500, detail=f"Database error: {str(e)}")
 
     # Increment usage count (skip for test user)
-    if user_id != "test-user-00000000-0000-0000-0000-000000000000":
+    if user_id != "00000000-0000-0000-0000-000000000000":
         supabase_client.rpc("increment_analyses_count", {"user_id": user_id}).execute()
 
     return {"analysis_id": analysis_id, "status": "pending"}
