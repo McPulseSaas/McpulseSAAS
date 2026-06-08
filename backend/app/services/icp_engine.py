@@ -3,10 +3,12 @@ import json
 from typing import Callable
 from app.models.schemas import AnalysisResult
 
-# Testing: 1000 personas. Will be controlled per-plan via Supabase later.
-DEFAULT_PERSONA_COUNT = 1000
-GEN_BATCH_SIZE = 100   # 100 personas per generation call (10 calls for 1000)
-SURVEY_BATCH_SIZE = 25  # 25 personas per survey call (40 calls for 1000)
+# Testing: 50 personas to stay within free-tier API rate limits.
+# Will be per-plan via Supabase later (Free=50, Starter=200, Growth=1000).
+DEFAULT_PERSONA_COUNT = 50
+GEN_BATCH_SIZE = 10    # 10 personas per call → 5 calls for 50
+SURVEY_BATCH_SIZE = 10  # 10 personas per call → 5 calls for 50
+MAX_CONCURRENT = 3     # max parallel calls at once to avoid rate limits
 
 
 PERSONA_GENERATION_PROMPT = """You are generating {count} realistic synthetic customer personas for market research.
@@ -204,21 +206,27 @@ async def run_analysis(
         if progress_callback:
             await progress_callback(stage, step, total, message)
 
-    # ── STAGE 1: Generate personas in parallel batches of GEN_BATCH_SIZE ──
+    # Semaphore to limit concurrent API calls and avoid rate limits
+    sem = asyncio.Semaphore(MAX_CONCURRENT)
+
+    async def limited_gen(count):
+        async with sem:
+            return await _generate_persona_batch(caller, count, product_name, problem,
+                                                  target_customer, solution, price_point)
+
+    async def limited_survey(batch):
+        async with sem:
+            return await _survey_batch(caller, batch, product_name, problem, solution, price_point)
+
+    # ── STAGE 1: Generate personas in batches (max MAX_CONCURRENT at once) ──
     await emit("personas", 0, 3, f"[ 1/3 ] Generating {persona_count} synthetic personas...")
 
-    gen_tasks = [
-        _generate_persona_batch(caller, GEN_BATCH_SIZE, product_name, problem,
-                                target_customer, solution, price_point)
-        for _ in range(persona_count // GEN_BATCH_SIZE)
-    ]
-    # Handle remainder
+    gen_counts = [GEN_BATCH_SIZE] * (persona_count // GEN_BATCH_SIZE)
     remainder = persona_count % GEN_BATCH_SIZE
     if remainder:
-        gen_tasks.append(_generate_persona_batch(caller, remainder, product_name, problem,
-                                                  target_customer, solution, price_point))
+        gen_counts.append(remainder)
 
-    gen_results = await asyncio.gather(*gen_tasks, return_exceptions=True)
+    gen_results = await asyncio.gather(*[limited_gen(c) for c in gen_counts], return_exceptions=True)
 
     personas = []
     for r in gen_results:
@@ -227,16 +235,11 @@ async def run_analysis(
 
     await emit("personas", 1, 3, f"[ 1/3 ] Generated {len(personas)} personas ✓")
 
-    # ── STAGE 2: Survey in parallel batches of SURVEY_BATCH_SIZE ──
+    # ── STAGE 2: Survey in batches (max MAX_CONCURRENT at once) ──
     await emit("survey", 1, 3, f"[ 2/3 ] Surveying {len(personas)} personas...")
 
     survey_batches = [personas[i:i + SURVEY_BATCH_SIZE] for i in range(0, len(personas), SURVEY_BATCH_SIZE)]
-    survey_tasks = [
-        _survey_batch(caller, batch, product_name, problem, solution, price_point)
-        for batch in survey_batches
-    ]
-
-    survey_results = await asyncio.gather(*survey_tasks, return_exceptions=True)
+    survey_results = await asyncio.gather(*[limited_survey(b) for b in survey_batches], return_exceptions=True)
 
     all_responses = []
     for r in survey_results:
