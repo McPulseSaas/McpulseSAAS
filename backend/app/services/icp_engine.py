@@ -1,7 +1,21 @@
 import asyncio
 import json
+import re
+import logging
 from typing import Callable
 from app.models.schemas import AnalysisResult
+
+logger = logging.getLogger(__name__)
+
+
+def _parse_json(raw: str) -> any:
+    """Parse JSON, stripping markdown code fences if present."""
+    raw = raw.strip()
+    # Strip ```json ... ``` or ``` ... ``` fences
+    raw = re.sub(r'^```(?:json)?\s*', '', raw)
+    raw = re.sub(r'\s*```$', '', raw)
+    raw = raw.strip()
+    return json.loads(raw)
 
 # Testing: 50 personas to stay within free-tier API rate limits.
 # Will be per-plan via Supabase later (Free=50, Starter=200, Growth=1000).
@@ -155,7 +169,8 @@ async def _generate_persona_batch(caller, count: int, product_name: str, problem
         solution=solution,
         price_point=price_point,
     ), temperature=0.9)
-    parsed = json.loads(raw)
+    logger.info(f"_generate_persona_batch raw response (first 200 chars): {raw[:200]}")
+    parsed = _parse_json(raw)
     return parsed if isinstance(parsed, list) else parsed.get(list(parsed.keys())[0], [])
 
 
@@ -169,7 +184,7 @@ async def _survey_batch(caller, batch: list, product_name: str, problem: str,
         price_point=price_point,
         personas_json=json.dumps(batch, indent=2),
     ), temperature=0.7)
-    parsed = json.loads(raw)
+    parsed = _parse_json(raw)
     return parsed if isinstance(parsed, list) else parsed.get(list(parsed.keys())[0], [])
 
 
@@ -230,8 +245,13 @@ async def run_analysis(
 
     personas = []
     for r in gen_results:
-        if isinstance(r, list):
+        if isinstance(r, Exception):
+            logger.error(f"Persona generation batch failed: {r}")
+        elif isinstance(r, list):
             personas.extend(r)
+
+    if not personas:
+        raise RuntimeError("All persona generation calls failed. Check API key and rate limits.")
 
     await emit("personas", 1, 3, f"[ 1/3 ] Generated {len(personas)} personas ✓")
 
@@ -290,7 +310,8 @@ async def run_analysis(
         features_list=features_sample,
     ), temperature=0.3)
 
-    analysis_data = json.loads(analysis_raw)
+    logger.info(f"Analysis raw (first 200): {analysis_raw[:200]}")
+    analysis_data = _parse_json(analysis_raw)
 
     score = analysis_data.get("validation_score", 0)
     signal = "STRONG" if score >= 71 else "MODERATE" if score >= 41 else "LOW"
